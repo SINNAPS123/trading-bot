@@ -1,11 +1,11 @@
-import time
+import asyncio
 import logging
-from threading import Thread
+import signal
 from kucoin_api.client import KuCoinFuturesClient
 from kucoin_api.test_client import TestKuCoinFuturesClient
 from strategies.scalping_strategy import ScalpingStrategy
 from ai_model.model import TradingAIModel
-from telegram_bot.bot import main as run_telegram_bot
+from telegram_bot.bot import run_telegram_bot
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', filename='trades.log')
@@ -18,6 +18,7 @@ class TradingBot:
         self.ai_model = TradingAIModel()
         self.running = False
         self.symbol = 'XBTUSDTM'  # Example symbol
+        self._stop_event = asyncio.Event()
 
     def set_mode(self, mode):
         if self.mode != mode:
@@ -27,6 +28,7 @@ class TradingBot:
 
     def stop(self):
         self.running = False
+        self._stop_event.set()
         logging.info("Trading bot stopped.")
 
     def graceful_stop(self):
@@ -41,15 +43,17 @@ class TradingBot:
                 logging.info(f"Closing position for {symbol}...")
                 self.kucoin_client.place_market_order(symbol, side, amount)
         logging.info("All positions closed. Bot stopped.")
+        self._stop_event.set()
 
-    def run(self):
+    async def run(self):
+        self.running = True
         while self.running:
             try:
                 # 1. Fetch data
                 kline_data = self.kucoin_client.get_kline_data(self.symbol, '1m')
                 if not kline_data:
                     logging.warning("No kline data received.")
-                    time.sleep(60)
+                    await asyncio.sleep(60)
                     continue
 
                 # 2. Generate signals
@@ -72,19 +76,39 @@ class TradingBot:
                     logging.info(f"Placing sell order for {self.symbol}")
                     self.kucoin_client.place_market_order(self.symbol, 'sell', 1, leverage=3)
 
-                time.sleep(60)  # Wait for the next candle
+                await asyncio.sleep(60)  # Wait for the next candle
             except Exception as e:
                 logging.error(f"An error occurred: {e}")
-                time.sleep(60)
+                await asyncio.sleep(60)
 
-if __name__ == '__main__':
+async def main():
     bot = TradingBot()
 
-    # Start the Telegram bot in a separate thread
-    telegram_thread = Thread(target=run_telegram_bot, args=(bot,))
-    telegram_thread.daemon = True
-    telegram_thread.start()
+    loop = asyncio.get_running_loop()
 
-    # Keep the main thread alive to allow the Telegram bot to run
-    while True:
-        time.sleep(1)
+    # Handle graceful shutdown
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, lambda: asyncio.create_task(shutdown(bot)))
+
+    telegram_task = loop.create_task(run_telegram_bot(bot))
+
+    # Keep the main function running
+    await bot._stop_event.wait()
+
+    # Wait for the Telegram bot to finish
+    await telegram_task
+
+async def shutdown(bot):
+    print("Shutting down...")
+    bot.graceful_stop()
+    tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+    for task in tasks:
+        task.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
+    asyncio.get_running_loop().stop()
+
+if __name__ == '__main__':
+    try:
+        asyncio.run(main())
+    except (KeyboardInterrupt, SystemExit):
+        logging.info("Bot shutdown.")

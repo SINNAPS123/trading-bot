@@ -4,3 +4,4 @@
 2025-07-13 07:39:22,584 - INFO - Closing position for XBTUSDTM...
 2025-07-13 07:39:22,584 - INFO - All positions closed. Bot stopped.
 2025-07-13 08:40:39,614 - INFO - HTTP Request: POST https://api.telegram.org/botYOUR_BOT_TOKEN/getMe "HTTP/1.1 404 Not Found"
+2025-07-13 10:40:00,087 - INFO - HTTP Request: POST https://api.telegram.org/botYOUR_BOT_TOKEN/getMe "HTTP/1.1 404 Not Found"
