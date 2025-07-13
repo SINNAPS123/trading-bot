@@ -3,11 +3,12 @@ import logging
 import signal
 import os
 import httpx
+import pandas as pd
 from dotenv import load_dotenv
 from kucoin_api.client import KuCoinFuturesClient
 from kucoin_api.test_client import TestKuCoinFuturesClient
 from strategies.scalping_strategy import ScalpingStrategy
-from ai_model.model import TradingAIModel
+from ai_model.dqn_model import DQNModel
 from telegram_bot.bot import run_telegram_bot
 import ta
 
@@ -22,7 +23,9 @@ class TradingBot:
         self.mode = 'test'  # 'test' or 'live'
         self.kucoin_client = TestKuCoinFuturesClient() if self.mode == 'test' else KuCoinFuturesClient()
         self.strategy = ScalpingStrategy()
-        self.ai_model = TradingAIModel()
+        self.state_size = 5  # open, high, low, close, volume
+        self.action_size = 3  # hold, buy, sell
+        self.ai_model = DQNModel(self.state_size, self.action_size)
         self.running = False
         self.symbol = 'XBTUSDTM'  # Example symbol
         self._stop_event = asyncio.Event()
@@ -103,6 +106,7 @@ class TradingBot:
 
     async def run(self):
         self.running = True
+        batch_size = 32
         while self.running:
             try:
                 # 1. Fetch data
@@ -112,40 +116,38 @@ class TradingBot:
                     await asyncio.sleep(60)
                     continue
 
-                # 2. Generate signals
-                signals_df = self.strategy.generate_signals(kline_data)
+                # 2. Prepare state
+                latest_kline = kline_data[-1]
+                state = np.reshape(latest_kline[1:], [1, self.state_size])
 
-                # 3. Get latest signal
-                latest_signal = signals_df.iloc[-1]
+                # 3. Act
+                action = self.ai_model.act(state)
 
-                # 4. (Optional) AI-enhanced decision
-                # X_latest = latest_signal[['open', 'high', 'low', 'close', 'volume']]
-                # ai_prediction = self.ai_model.predict(X_latest)
+                # 4. Execute trades
+                reward = 0
+                done = False
+                if action == 1:  # Buy
+                    # Place buy order
+                    logging.info(f"Placing buy order for {self.symbol}")
+                    self.kucoin_client.place_market_order(self.symbol, 'buy', 1, leverage=3)
+                    reward = 1  # Example reward
+                elif action == 2:  # Sell
+                    # Place sell order
+                    logging.info(f"Placing sell order for {self.symbol}")
+                    self.kucoin_client.place_market_order(self.symbol, 'sell', 1, leverage=3)
+                    reward = 1  # Example reward
 
-                # 5. Execute trades
-                atr = self.calculate_atr(pd.DataFrame(kline_data, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume']))
-                stop_loss_price = latest_signal['close'] - atr * 1.5
-                take_profit_price = latest_signal['close'] + atr * 3
+                # 5. Get next state
+                next_kline_data = self.kucoin_client.get_kline_data(self.symbol, '1m')
+                next_latest_kline = next_kline_data[-1]
+                next_state = np.reshape(next_latest_kline[1:], [1, self.state_size])
 
-                open_positions = self.kucoin_client.get_open_positions()
+                # 6. Remember
+                self.ai_model.remember(state, action, reward, next_state, done)
 
-                if not open_positions:
-                    if latest_signal['buy_signal'] and self.mode == 'live':
-                        # Place buy order
-                        logging.info(f"Placing buy order for {self.symbol} with SL: {stop_loss_price} and TP: {take_profit_price}")
-                        self.kucoin_client.place_market_order(self.symbol, 'buy', 1, leverage=3, stop_loss_price=stop_loss_price, take_profit_price=take_profit_price)
-                    elif latest_signal['sell_signal'] and self.mode == 'live':
-                        # Place sell order
-                        logging.info(f"Placing sell order for {self.symbol} with SL: {stop_loss_price} and TP: {take_profit_price}")
-                        self.kucoin_client.place_market_order(self.symbol, 'sell', 1, leverage=3, stop_loss_price=stop_loss_price, take_profit_price=take_profit_price)
-                else:
-                    for position in open_positions:
-                        if position['side'] == 'long' and (latest_signal['close'] <= stop_loss_price or latest_signal['close'] >= take_profit_price):
-                            logging.info(f"Closing long position for {self.symbol} due to risk management.")
-                            self.kucoin_client.place_market_order(self.symbol, 'sell', position['contracts'])
-                        elif position['side'] == 'short' and (latest_signal['close'] >= stop_loss_price or latest_signal['close'] <= take_profit_price):
-                            logging.info(f"Closing short position for {self.symbol} due to risk management.")
-                            self.kucoin_client.place_market_order(self.symbol, 'buy', position['contracts'])
+                # 7. Replay
+                if len(self.ai_model.memory) > batch_size:
+                    self.ai_model.replay(batch_size)
 
                 await asyncio.sleep(60)  # Wait for the next candle
             except Exception as e:
