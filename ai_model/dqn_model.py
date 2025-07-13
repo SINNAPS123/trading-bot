@@ -51,9 +51,13 @@ class DQNModel:
             self.epsilon *= self.epsilon_decay
 
     def load(self, name):
+        if not name.endswith('.weights.h5'):
+            name += '.weights.h5'
         self.model.load_weights(name)
 
     def save(self, name):
+        if not name.endswith('.weights.h5'):
+            name += '.weights.h5'
         self.model.save_weights(name)
 
     def prepare_data(self, kline_data):
