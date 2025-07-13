@@ -9,11 +9,14 @@ load_dotenv()
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text('Hello! I am your KuCoin Trading Bot. Use /help to see available commands.')
 
+from threading import Thread
+
 async def start_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     bot_instance = context.bot_data.get('bot_instance')
     if bot_instance and not bot_instance.running:
         bot_instance.running = True
         thread = Thread(target=bot_instance.run)
+        thread.daemon = True
         thread.start()
         await update.message.reply_text('Trading bot started.')
     elif bot_instance and bot_instance.running:
@@ -54,12 +57,18 @@ async def set_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.args:
         mode = context.args[0].lower()
         if mode in ['live', 'test']:
-            context.bot_data['mode'] = mode
-            await update.message.reply_text(f'Mode set to {mode}.')
+            bot_instance = context.bot_data.get('bot_instance')
+            if bot_instance:
+                bot_instance.set_mode(mode)
+                await update.message.reply_text(f'Mode set to {mode}.')
+            else:
+                await update.message.reply_text('Bot instance not found.')
         else:
             await update.message.reply_text('Invalid mode. Use "live" or "test".')
     else:
         await update.message.reply_text('Please specify a mode: /set_mode <live/test>')
+
+import asyncio
 
 def main(bot_instance):
     token = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -78,7 +87,12 @@ def main(bot_instance):
     application.add_handler(CommandHandler("test_strategy", test_strategy))
     application.add_handler(CommandHandler("set_mode", set_mode))
 
-    application.run_polling()
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    loop.run_until_complete(application.initialize())
+    loop.run_until_complete(application.start())
+    loop.run_until_complete(application.updater.start_polling())
 
 if __name__ == '__main__':
-    main()
+    main(None)
