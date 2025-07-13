@@ -30,8 +30,7 @@ import asyncio
 async def start_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     bot_instance = context.bot_data.get('bot_instance')
     if bot_instance and not bot_instance.running:
-        loop = asyncio.get_event_loop()
-        loop.create_task(bot_instance.run())
+        asyncio.create_task(bot_instance.run())
         await update.message.reply_text('Trading bot started.')
     elif bot_instance and bot_instance.running:
         await update.message.reply_text('Trading bot is already running.')
@@ -40,16 +39,22 @@ async def start_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def stop_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     bot_instance = context.bot_data.get('bot_instance')
-    if bot_instance:
+    if bot_instance and bot_instance.running:
         await update.message.reply_text('Initiating graceful stop... The bot will stop after closing all positions.')
         bot_instance.graceful_stop()
+    elif bot_instance and not bot_instance.running:
+        await update.message.reply_text('Trading bot is already stopped.')
     else:
         await update.message.reply_text('Bot instance not found.')
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    running = context.bot_data.get('running', False)
-    mode = context.bot_data.get('mode', 'test')
-    await update.message.reply_text(f'Bot status: {"Running" if running else "Stopped"}\nMode: {mode}')
+    bot_instance = context.bot_data.get('bot_instance')
+    if bot_instance:
+        running = bot_instance.running
+        mode = bot_instance.mode
+        await update.message.reply_text(f'Bot status: {"Running" if running else "Stopped"}\nMode: {mode}')
+    else:
+        await update.message.reply_text('Bot instance not found.')
 
 async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     bot_instance = context.bot_data.get('bot_instance')
