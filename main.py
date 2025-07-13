@@ -16,7 +16,12 @@ import ta
 load_dotenv()
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', filename='trades.log')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', filename='trades.log', filemode='a')
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+console_handler.setFormatter(formatter)
+logging.getLogger().addHandler(console_handler)
 
 class TradingBot:
     def __init__(self):
@@ -38,6 +43,9 @@ class TradingBot:
             close=df['close'],
             window=period
         ).average_true_range().iloc[-1]
+
+    def calculate_trade_size(self, balance, risk_percentage):
+        return (balance * risk_percentage) / 100
 
     async def get_market_analysis(self, symbol):
         if not self.perplexity_api_key:
@@ -105,8 +113,10 @@ class TradingBot:
                 logging.error(f"An error occurred during model retraining: {e}")
 
     async def run(self):
+        self._stop_event.clear()
         self.running = True
         batch_size = 32
+        logging.info("Trading bot started.")
         while self.running:
             try:
                 # 1. Fetch data
@@ -128,13 +138,17 @@ class TradingBot:
                 done = False
                 if action == 1:  # Buy
                     # Place buy order
-                    logging.info(f"Placing buy order for {self.symbol}")
-                    self.kucoin_client.place_market_order(self.symbol, 'buy', 1, leverage=3)
+                    balance = self.kucoin_client.get_account_overview().get('USDT', {}).get('total', 0)
+                    trade_size = self.calculate_trade_size(balance, 2)  # 2% risk
+                    logging.info(f"Placing buy order for {self.symbol} with size {trade_size}")
+                    self.kucoin_client.place_market_order(self.symbol, 'buy', trade_size, leverage=3)
                     reward = 1  # Example reward
                 elif action == 2:  # Sell
                     # Place sell order
-                    logging.info(f"Placing sell order for {self.symbol}")
-                    self.kucoin_client.place_market_order(self.symbol, 'sell', 1, leverage=3)
+                    balance = self.kucoin_client.get_account_overview().get('USDT', {}).get('total', 0)
+                    trade_size = self.calculate_trade_size(balance, 2)  # 2% risk
+                    logging.info(f"Placing sell order for {self.symbol} with size {trade_size}")
+                    self.kucoin_client.place_market_order(self.symbol, 'sell', trade_size, leverage=3)
                     reward = 1  # Example reward
 
                 # 5. Get next state
@@ -153,10 +167,10 @@ class TradingBot:
             except Exception as e:
                 logging.error(f"An error occurred: {e}")
                 await asyncio.sleep(60)
+        logging.info("Trading bot stopped.")
 
 async def main():
     bot = TradingBot()
-
     loop = asyncio.get_running_loop()
 
     # Handle graceful shutdown
@@ -164,16 +178,9 @@ async def main():
         loop.add_signal_handler(sig, lambda: asyncio.create_task(shutdown(bot)))
 
     telegram_task = loop.create_task(run_telegram_bot(bot))
-    bot_task = loop.create_task(bot.run())
-    retrain_task = loop.create_task(bot.retrain_model_periodically())
-
-    # Keep the main function running
+    # The bot will be started via Telegram command
     await bot._stop_event.wait()
-
-    # Wait for the Telegram bot and trading bot to finish
     await telegram_task
-    await bot_task
-    await retrain_task
 
 async def shutdown(bot):
     print("Shutting down...")
