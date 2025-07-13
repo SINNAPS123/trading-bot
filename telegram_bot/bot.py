@@ -68,10 +68,12 @@ async def set_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text('Please specify a mode: /set_mode <live/test>')
 
-import asyncio
-
-def main(bot_instance):
+async def run_telegram_bot(bot_instance):
     token = os.getenv("TELEGRAM_BOT_TOKEN")
+    if not token:
+        logging.error("TELEGRAM_BOT_TOKEN not set.")
+        return
+
     application = ApplicationBuilder().token(token).build()
 
     # Add the bot instance to the application context
@@ -87,12 +89,8 @@ def main(bot_instance):
     application.add_handler(CommandHandler("test_strategy", test_strategy))
     application.add_handler(CommandHandler("set_mode", set_mode))
 
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+    await application.initialize()
+    await application.start()
+    await application.updater.start_polling()
 
-    loop.run_until_complete(application.initialize())
-    loop.run_until_complete(application.start())
-    loop.run_until_complete(application.updater.start_polling())
-
-if __name__ == '__main__':
-    main(None)
+    # The bot will run until it's stopped from main.py
