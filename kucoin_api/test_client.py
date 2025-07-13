@@ -13,26 +13,40 @@ class TestKuCoinFuturesClient:
     def get_account_overview(self):
         return self.balance
 
-    def place_market_order(self, symbol, side, amount, leverage=1):
+    def place_market_order(self, symbol, side, amount, leverage=1, stop_loss_price=None, take_profit_price=None):
         # Simulate placing a market order
         print(f"Simulating place_market_order: {symbol}, {side}, {amount}")
         order_id = f"sim_{int(time.time() * 1000)}"
+
+        # Get the current price from the kline data
+        current_price = self.kline_data[-1][4]  # close price
+
         self.orders[order_id] = {
             'id': order_id,
             'symbol': symbol,
             'side': side,
             'type': 'market',
             'amount': amount,
+            'price': current_price,
             'status': 'closed',
             'timestamp': int(time.time() * 1000)
         }
+
         # Simulate position change
         if symbol not in self.positions:
-            self.positions[symbol] = {'contracts': 0}
+            self.positions[symbol] = {'contracts': 0, 'avg_entry_price': 0}
+
         if side == 'buy':
             self.positions[symbol]['contracts'] += amount
         else:
             self.positions[symbol]['contracts'] -= amount
+
+        # Update average entry price
+        if self.positions[symbol]['contracts'] != 0:
+            self.positions[symbol]['avg_entry_price'] = current_price
+        else:
+            self.positions[symbol]['avg_entry_price'] = 0
+
         return self.orders[order_id]
 
     def get_order_details(self, order_id):

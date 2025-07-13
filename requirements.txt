@@ -1,4 +1,4 @@
-kucoin-futures-rest
+kucoin-python
 pandas
 numpy
 python-telegram-bot
@@ -7,3 +7,5 @@ httpx
 ta
 python-dotenv
 ccxt
+tensorflow
+scikit-learn

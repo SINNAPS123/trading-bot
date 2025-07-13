@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from sklearn.preprocessing import MinMaxScaler
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import LSTM, Dense, Dropout
+from tensorflow.keras.layers import LSTM, Dense, Dropout, Input
 from tensorflow.keras.models import load_model as keras_load_model, save_model
 
 class TradingAIModel:
@@ -12,7 +12,8 @@ class TradingAIModel:
 
     def _build_model(self):
         model = Sequential()
-        model.add(LSTM(units=50, return_sequences=True, input_shape=(self.sequence_length, 1)))
+        model.add(Input(shape=(self.sequence_length, 1)))
+        model.add(LSTM(units=50, return_sequences=True))
         model.add(Dropout(0.2))
         model.add(LSTM(units=50, return_sequences=False))
         model.add(Dropout(0.2))
