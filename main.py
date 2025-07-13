@@ -30,11 +30,28 @@ class TradingBot:
         self.running = False
         logging.info("Trading bot stopped.")
 
+    def graceful_stop(self):
+        logging.info("Initiating graceful stop...")
+        self.running = False
+        open_positions = self.kucoin_client.get_open_positions()
+        for position in open_positions:
+            if float(position.get('contracts', 0)) > 0:
+                symbol = position['symbol']
+                side = 'sell' if position['side'] == 'long' else 'buy'
+                amount = position['contracts']
+                logging.info(f"Closing position for {symbol}...")
+                self.kucoin_client.place_market_order(symbol, side, amount)
+        logging.info("All positions closed. Bot stopped.")
+
     def run(self):
         while self.running:
             try:
                 # 1. Fetch data
-                kline_data = self.kucoin_client.get_kline_data(self.symbol, 1) # 1-minute granularity
+                kline_data = self.kucoin_client.get_kline_data(self.symbol, '1m')
+                if not kline_data:
+                    logging.warning("No kline data received.")
+                    time.sleep(60)
+                    continue
 
                 # 2. Generate signals
                 signals_df = self.strategy.generate_signals(kline_data)
@@ -50,11 +67,11 @@ class TradingBot:
                 if latest_signal['buy_signal'] and self.mode == 'live':
                     # Place buy order
                     logging.info(f"Placing buy order for {self.symbol}")
-                    # self.kucoin_client.place_market_order(self.symbol, 'buy', 3, 1)
+                    self.kucoin_client.place_market_order(self.symbol, 'buy', 1, leverage=3)
                 elif latest_signal['sell_signal'] and self.mode == 'live':
                     # Place sell order
                     logging.info(f"Placing sell order for {self.symbol}")
-                    # self.kucoin_client.place_market_order(self.symbol, 'sell', 3, 1)
+                    self.kucoin_client.place_market_order(self.symbol, 'sell', 1, leverage=3)
 
                 time.sleep(60)  # Wait for the next candle
             except Exception as e:
@@ -65,10 +82,10 @@ if __name__ == '__main__':
     bot = TradingBot()
 
     # Start the Telegram bot in a separate thread
-    telegram_thread = Thread(target=run_telegram_bot)
+    telegram_thread = Thread(target=run_telegram_bot, args=(bot,))
+    telegram_thread.daemon = True
     telegram_thread.start()
 
-    # You can control the bot via Telegram commands
-    # For now, we'll just keep the main thread alive
+    # Keep the main thread alive to allow the Telegram bot to run
     while True:
         time.sleep(1)

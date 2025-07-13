@@ -10,12 +10,24 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text('Hello! I am your KuCoin Trading Bot. Use /help to see available commands.')
 
 async def start_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.bot_data['running'] = True
-    await update.message.reply_text('Trading bot started.')
+    bot_instance = context.bot_data.get('bot_instance')
+    if bot_instance and not bot_instance.running:
+        bot_instance.running = True
+        thread = Thread(target=bot_instance.run)
+        thread.start()
+        await update.message.reply_text('Trading bot started.')
+    elif bot_instance and bot_instance.running:
+        await update.message.reply_text('Trading bot is already running.')
+    else:
+        await update.message.reply_text('Bot instance not found.')
 
 async def stop_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.bot_data['running'] = False
-    await update.message.reply_text('Trading bot stopped.')
+    bot_instance = context.bot_data.get('bot_instance')
+    if bot_instance:
+        await update.message.reply_text('Initiating graceful stop... The bot will stop after closing all positions.')
+        bot_instance.graceful_stop()
+    else:
+        await update.message.reply_text('Bot instance not found.')
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     running = context.bot_data.get('running', False)
@@ -49,9 +61,12 @@ async def set_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text('Please specify a mode: /set_mode <live/test>')
 
-def main():
+def main(bot_instance):
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     application = ApplicationBuilder().token(token).build()
+
+    # Add the bot instance to the application context
+    application.bot_data['bot_instance'] = bot_instance
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("start_bot", start_bot))
