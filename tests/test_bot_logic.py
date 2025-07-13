@@ -1,7 +1,8 @@
 import asyncio
 import unittest
 from unittest.mock import MagicMock, AsyncMock
-
+import numpy as np
+import httpx
 from main import TradingBot
 
 class TestBotLogic(unittest.TestCase):

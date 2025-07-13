@@ -97,11 +97,17 @@ async def train(update: Update, context: ContextTypes.DEFAULT_TYPE):
     bot_instance = context.bot_data.get('bot_instance')
     if bot_instance:
         await update.message.reply_text('Starting AI model training...')
-        kline_data = bot_instance.kucoin_client.get_kline_data(bot_instance.symbol, '1h', limit=500)
-        X, y = bot_instance.ai_model.prepare_data(kline_data)
-        accuracy = bot_instance.ai_model.train(X, y)
-        bot_instance.ai_model.save_model()
-        await update.message.reply_text(f'AI model training complete. Accuracy: {accuracy}')
+        await bot_instance.send_telegram_message("🧠 Starting AI model training...")
+        try:
+            kline_data = bot_instance.kucoin_client.get_kline_data(bot_instance.symbol, '1h', limit=500)
+            X, y = bot_instance.ai_model.prepare_data(kline_data)
+            bot_instance.ai_model.replay(len(bot_instance.ai_model.memory) if len(bot_instance.ai_model.memory) < 32 else 32)
+            bot_instance.ai_model.save("dqn_model.h5")
+            await update.message.reply_text('AI model training complete.')
+            await bot_instance.send_telegram_message("✅ AI model training complete.")
+        except Exception as e:
+            await update.message.reply_text(f"An error occurred during training: {e}")
+            await bot_instance.send_telegram_message(f"🚨 An error occurred during training: {e}")
     else:
         await update.message.reply_text('Bot instance not found.')
 
