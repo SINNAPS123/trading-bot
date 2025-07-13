@@ -30,24 +30,28 @@ class ScalpingStrategy:
     def generate_signals(self, kline_data):
         df = pd.DataFrame(kline_data, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
         df['close'] = df['close'].astype(float)
+        df['high'] = df['high'].astype(float)
+        df['low'] = df['low'].astype(float)
 
         df['short_ema'] = self._calculate_ema(df, self.short_ema_period)
         df['long_ema'] = self._calculate_ema(df, self.long_ema_period)
         df['rsi'] = self._calculate_rsi(df, self.rsi_period)
         df['macd_line'], df['signal_line'] = self._calculate_macd(df, self.macd_fast_period, self.macd_slow_period, self.macd_signal_period)
+        df['macd_histogram'] = df['macd_line'] - df['signal_line']
 
-        # Entry signal: short EMA crosses above long EMA, RSI is not overbought, and MACD line is above signal line
+        # Entry signal: short EMA crosses above long EMA, RSI is not overbought, and MACD histogram is positive
         df['buy_signal'] = np.where(
             (df['short_ema'] > df['long_ema']) &
             (df['rsi'] < 70) &
-            (df['macd_line'] > df['signal_line']),
+            (df['macd_histogram'] > 0),
             1, 0
         )
 
-        # Exit signal: short EMA crosses below long EMA or RSI is overbought
+        # Exit signal: short EMA crosses below long EMA or RSI is overbought, and MACD histogram is negative
         df['sell_signal'] = np.where(
-            (df['short_ema'] < df['long_ema']) |
-            (df['rsi'] > 70),
+            ((df['short_ema'] < df['long_ema']) |
+            (df['rsi'] > 70)) &
+            (df['macd_histogram'] < 0),
             1, 0
         )
 

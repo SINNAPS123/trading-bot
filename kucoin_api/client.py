@@ -1,11 +1,16 @@
 import os
-import ccxt
+try:
+    import ccxt
+except ImportError:
+    ccxt = None
 from dotenv import load_dotenv
 
 load_dotenv()
 
 class KuCoinFuturesClient:
     def __init__(self):
+        if not ccxt:
+            raise ImportError("ccxt is not installed. Please install it with 'pip install ccxt'")
         self.api_key = os.getenv("KUCOIN_API_KEY")
         self.api_secret = os.getenv("KUCOIN_API_SECRET")
         self.api_passphrase = os.getenv("KUCOIN_API_PASSPHRASE")

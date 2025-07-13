@@ -1,7 +1,9 @@
-ccxt
+kucoin-futures-rest
 pandas
 numpy
-scikit-learn
-xgboost
 python-telegram-bot
 python-dotenv
+httpx
+ta
+python-dotenv
+ccxt
