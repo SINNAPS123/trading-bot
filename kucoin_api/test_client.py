@@ -21,6 +21,7 @@ class TestKuCoinFuturesClient:
             'id': order_id,
             'symbol': symbol,
             'side': side,
+            'type': 'market',
             'amount': amount,
             'status': 'closed',
             'timestamp': int(time.time() * 1000)

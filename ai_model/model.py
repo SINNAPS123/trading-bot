@@ -1,38 +1,48 @@
 import pandas as pd
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score
-import joblib
+import numpy as np
+from sklearn.preprocessing import MinMaxScaler
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, Dense, Dropout
+from tensorflow.keras.models import load_model as keras_load_model, save_model
 
 class TradingAIModel:
-    def __init__(self, n_estimators=100, random_state=42):
-        self.model = RandomForestClassifier(n_estimators=n_estimators, random_state=random_state)
+    def __init__(self, sequence_length=60):
+        self.sequence_length = sequence_length
+        self.model = self._build_model()
+
+    def _build_model(self):
+        model = Sequential()
+        model.add(LSTM(units=50, return_sequences=True, input_shape=(self.sequence_length, 1)))
+        model.add(Dropout(0.2))
+        model.add(LSTM(units=50, return_sequences=False))
+        model.add(Dropout(0.2))
+        model.add(Dense(units=25))
+        model.add(Dense(units=1))
+        model.compile(optimizer='adam', loss='mean_squared_error')
+        return model
 
     def prepare_data(self, kline_data):
         df = pd.DataFrame(kline_data, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
         df['close'] = df['close'].astype(float)
-        df['future_return'] = df['close'].pct_change().shift(-1)
-        df['target'] = (df['future_return'] > 0).astype(int)
-        df.dropna(inplace=True)
 
-        features = ['open', 'high', 'low', 'close', 'volume']
-        X = df[features]
-        y = df['target']
-        return X, y
+        scaler = MinMaxScaler(feature_range=(0,1))
+        scaled_data = scaler.fit_transform(df['close'].values.reshape(-1,1))
 
-    def train(self, X, y):
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-        self.model.fit(X_train, y_train)
-        predictions = self.model.predict(X_test)
-        accuracy = accuracy_score(y_test, predictions)
-        print(f"Model Accuracy: {accuracy}")
-        return accuracy
+        X, y = [], []
+        for i in range(self.sequence_length, len(scaled_data)):
+            X.append(scaled_data[i-self.sequence_length:i, 0])
+            y.append(scaled_data[i, 0])
 
-    def save_model(self, filepath='ai_model/ai_model.pkl'):
-        joblib.dump(self.model, filepath)
+        return np.array(X), np.array(y), scaler
 
-    def load_model(self, filepath='ai_model/ai_model.pkl'):
-        self.model = joblib.load(filepath)
+    def train(self, X, y, epochs=1, batch_size=1):
+        self.model.fit(X, y, epochs=epochs, batch_size=batch_size)
+
+    def save_model(self, filepath='ai_model/ai_model.h5'):
+        save_model(self.model, filepath)
+
+    def load_model(self, filepath='ai_model/ai_model.h5'):
+        self.model = keras_load_model(filepath)
 
     def predict(self, X):
         return self.model.predict(X)
