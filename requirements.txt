@@ -1,11 +1,6 @@
-kucoin-python
-pandas
-numpy
-python-telegram-bot
-python-dotenv
+tensorflow-cpu
 httpx
-ta
+pandas
 python-dotenv
-ccxt
-tensorflow
-scikit-learn
+python-telegram-bot
+ta
