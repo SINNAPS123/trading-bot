@@ -36,7 +36,7 @@ class TradingBot:
         self.running = False
         open_positions = self.kucoin_client.get_open_positions()
         for position in open_positions:
-            if float(position.get('contracts', 0)) > 0:
+            if float(position.get('contracts', 0)) != 0:
                 symbol = position['symbol']
                 side = 'sell' if position['side'] == 'long' else 'buy'
                 amount = position['contracts']

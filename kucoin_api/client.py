@@ -27,7 +27,10 @@ class KuCoinFuturesClient:
 
     def place_market_order(self, symbol, side, amount, leverage=1):
         self.exchange.set_leverage(leverage, symbol)
-        return self.exchange.create_market_order(symbol, side, amount)
+        order = self.exchange.create_market_order(symbol, side, amount)
+        with open('trades.log', 'a') as f:
+            f.write(f"Timestamp: {order['timestamp']}, Symbol: {order['symbol']}, Side: {order['side']}, Amount: {order['amount']}, Price: {order['price']}\\n")
+        return order
 
     def get_order_details(self, order_id):
         return self.exchange.fetch_order(order_id)
