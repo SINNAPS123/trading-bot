@@ -56,10 +56,12 @@ class ScalpingStrategy:
             1, 0
         )
 
-        # Stop-loss for buy positions
-        df['stop_loss_buy'] = df['low'] - df['atr'] * 1.5
+        # Stop-loss and Take-profit for buy positions
+        df['stop_loss_buy'] = df['close'] - df['atr'] * 1.5
+        df['take_profit_buy'] = df['close'] + df['atr'] * 2
 
-        # Stop-loss for sell positions
-        df['stop_loss_sell'] = df['high'] + df['atr'] * 1.5
+        # Stop-loss and Take-profit for sell positions
+        df['stop_loss_sell'] = df['close'] + df['atr'] * 1.5
+        df['take_profit_sell'] = df['close'] - df['atr'] * 2
 
         return df

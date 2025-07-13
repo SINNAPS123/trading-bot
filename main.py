@@ -35,6 +35,7 @@ class TradingBot:
         self.running = False
         self.symbol = 'XBTUSDTM'  # Example symbol
         self._stop_event = asyncio.Event()
+        self.is_trading_active = False
         self.perplexity_api_key = os.getenv("PERPLEXITY_API_KEY")
         self.telegram_bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
         self.telegram_chat_id = os.getenv("TELEGRAM_CHAT_ID")
@@ -146,55 +147,97 @@ class TradingBot:
     async def run(self):
         self._stop_event.clear()
         self.running = True
+        self.is_trading_active = True
         batch_size = 32
         logging.info("Trading bot started.")
-        await self.send_telegram_message("🤖 Trading bot started.")
+        await self.send_telegram_message("🤖 **Trading Bot Started**\nInitializing...")
+
         while self.running:
+            if not self.is_trading_active:
+                await asyncio.sleep(10)
+                continue
+
             try:
                 # 1. Fetch data
+                logging.info("Fetching market data...")
                 kline_data = self.kucoin_client.get_kline_data(self.symbol, '1m')
                 if not kline_data:
-                    logging.warning("No kline data received.")
+                    logging.warning("No kline data received. Waiting...")
+                    await self.send_telegram_message("⏳ No market data received. The bot will retry shortly.")
                     await asyncio.sleep(60)
                     continue
+                logging.info(f"Successfully fetched {len(kline_data)} k-line data points.")
 
                 # 2. Prepare state
                 latest_kline = kline_data[-1]
                 state = np.reshape(latest_kline[1:], [1, self.state_size])
+                logging.info(f"Current market price for {self.symbol}: {latest_kline[4]}")
+                await self.send_telegram_message(f"📊 **Market Update**\n**Symbol:** `{self.symbol}`\n**Price:** `{latest_kline[4]}`")
 
                 # 3. Act
+                logging.info("AI model is making a decision...")
                 action = self.ai_model.act(state)
+                action_map = {0: "Hold", 1: "Buy", 2: "Sell"}
+                logging.info(f"AI model action: {action_map[action]}")
+                await self.send_telegram_message(f"🧠 **AI Decision**\n**Action:** `{action_map[action]}`")
 
                 # 4. Execute trades
                 reward = 0
                 done = False
                 if action == 1:  # Buy
+                    trade_size = self.calculate_trade_size(self.simulated_balance if self.mode == 'test' else self.kucoin_client.get_account_overview().get('USDT', {}).get('total', 0), 2)
+                    atr = self.calculate_atr(pd.DataFrame(kline_data, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume']))
+                    stop_loss = latest_kline[3] - atr * 1.5
+                    take_profit = latest_kline[4] + atr * 2
+
                     if self.mode == 'test':
-                        trade_size = self.calculate_trade_size(self.simulated_balance, 2)
-                        # Simulate buying
                         self.simulated_balance -= trade_size
-                        self.simulated_pnl -= trade_size * 0.0005 # Simulate fees
-                        await self.send_telegram_message(f"📈 [TEST] Placing buy order for {self.symbol} with size {trade_size:.2f}.\nSimulated Balance: {self.simulated_balance:.2f}\nSimulated P&L: {self.simulated_pnl:.2f}")
+                        self.simulated_pnl -= trade_size * 0.0005  # Simulate fees
+                        message = (f"📈 **[TEST] Placing Buy Order**\n"
+                                   f"**Symbol:** `{self.symbol}`\n"
+                                   f"**Size:** `{trade_size:.2f}`\n"
+                                   f"**Stop-Loss:** `{stop_loss:.2f}`\n"
+                                   f"**Take-Profit:** `{take_profit:.2f}`\n"
+                                   f"**Simulated Balance:** `{self.simulated_balance:.2f}`\n"
+                                   f"**Simulated P&L:** `{self.simulated_pnl:.2f}`")
+                        await self.send_telegram_message(message)
                     else:
-                        balance = self.kucoin_client.get_account_overview().get('USDT', {}).get('total', 0)
-                        trade_size = self.calculate_trade_size(balance, 2)  # 2% risk
                         logging.info(f"Placing buy order for {self.symbol} with size {trade_size}")
-                        await self.send_telegram_message(f"📈 Placing buy order for {self.symbol} with size {trade_size}")
-                        self.kucoin_client.place_market_order(self.symbol, 'buy', trade_size, leverage=3)
+                        message = (f"📈 **Placing Buy Order**\n"
+                                   f"**Symbol:** `{self.symbol}`\n"
+                                   f"**Size:** `{trade_size}`\n"
+                                   f"**Stop-Loss:** `{stop_loss:.2f}`\n"
+                                   f"**Take-Profit:** `{take_profit:.2f}`")
+                        await self.send_telegram_message(message)
+                        self.kucoin_client.place_market_order(self.symbol, 'buy', trade_size, leverage=3, stop_loss=stop_loss, take_profit=take_profit)
                     reward = 1  # Example reward
+
                 elif action == 2:  # Sell
+                    trade_size = self.calculate_trade_size(self.simulated_balance if self.mode == 'test' else self.kucoin_client.get_account_overview().get('USDT', {}).get('total', 0), 2)
+                    atr = self.calculate_atr(pd.DataFrame(kline_data, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume']))
+                    stop_loss = latest_kline[2] + atr * 1.5
+                    take_profit = latest_kline[4] - atr * 2
+
                     if self.mode == 'test':
-                        trade_size = self.calculate_trade_size(self.simulated_balance, 2)
-                        # Simulate selling
                         self.simulated_balance += trade_size
-                        self.simulated_pnl += trade_size * 0.9995 # Simulate fees and profit
-                        await self.send_telegram_message(f"📉 [TEST] Placing sell order for {self.symbol} with size {trade_size:.2f}.\nSimulated Balance: {self.simulated_balance:.2f}\nSimulated P&L: {self.simulated_pnl:.2f}")
+                        self.simulated_pnl += trade_size * 0.9995  # Simulate fees and profit
+                        message = (f"📉 **[TEST] Placing Sell Order**\n"
+                                   f"**Symbol:** `{self.symbol}`\n"
+                                   f"**Size:** `{trade_size:.2f}`\n"
+                                   f"**Stop-Loss:** `{stop_loss:.2f}`\n"
+                                   f"**Take-Profit:** `{take_profit:.2f}`\n"
+                                   f"**Simulated Balance:** `{self.simulated_balance:.2f}`\n"
+                                   f"**Simulated P&L:** `{self.simulated_pnl:.2f}`")
+                        await self.send_telegram_message(message)
                     else:
-                        balance = self.kucoin_client.get_account_overview().get('USDT', {}).get('total', 0)
-                        trade_size = self.calculate_trade_size(balance, 2)  # 2% risk
                         logging.info(f"Placing sell order for {self.symbol} with size {trade_size}")
-                        await self.send_telegram_message(f"📉 Placing sell order for {self.symbol} with size {trade_size}")
-                        self.kucoin_client.place_market_order(self.symbol, 'sell', trade_size, leverage=3)
+                        message = (f"📉 **Placing Sell Order**\n"
+                                   f"**Symbol:** `{self.symbol}`\n"
+                                   f"**Size:** `{trade_size}`\n"
+                                   f"**Stop-Loss:** `{stop_loss:.2f}`\n"
+                                   f"**Take-Profit:** `{take_profit:.2f}`")
+                        await self.send_telegram_message(message)
+                        self.kucoin_client.place_market_order(self.symbol, 'sell', trade_size, leverage=3, stop_loss=stop_loss, take_profit=take_profit)
                     reward = 1  # Example reward
 
                 # 5. Get next state
@@ -207,15 +250,18 @@ class TradingBot:
 
                 # 7. Replay
                 if len(self.ai_model.memory) > batch_size:
+                    logging.info("AI model is learning from recent trades...")
                     self.ai_model.replay(batch_size)
+                    await self.send_telegram_message("🧠 The AI model is learning from recent trades.")
 
+                logging.info("Waiting for the next market candle...")
                 await asyncio.sleep(60)  # Wait for the next candle
             except Exception as e:
                 logging.error(f"An error occurred: {e}")
-                await self.send_telegram_message(f"🚨 An error occurred: {e}")
+                await self.send_telegram_message(f"🚨 **An Error Occurred**\n`{e}`\nThe bot will continue after a short delay.")
                 await asyncio.sleep(60)
         logging.info("Trading bot stopped.")
-        await self.send_telegram_message("🛑 Trading bot stopped.")
+        await self.send_telegram_message("🛑 **Trading Bot Stopped**")
 
 async def main():
     bot = TradingBot()
