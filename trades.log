@@ -5,3 +5,11 @@
 2025-07-13 07:39:22,584 - INFO - All positions closed. Bot stopped.
 2025-07-13 08:40:39,614 - INFO - HTTP Request: POST https://api.telegram.org/botYOUR_BOT_TOKEN/getMe "HTTP/1.1 404 Not Found"
 2025-07-13 10:40:00,087 - INFO - HTTP Request: POST https://api.telegram.org/botYOUR_BOT_TOKEN/getMe "HTTP/1.1 404 Not Found"
+2025-07-13 15:22:34,789 - ERROR - An error occurred: name 'np' is not defined
+2025-07-13 15:22:35,286 - INFO - HTTP Request: POST https://api.telegram.org/botyour_telegram_bot_token/getMe "HTTP/1.1 404 Not Found"
+2025-07-13 15:23:34,849 - ERROR - An error occurred: name 'np' is not defined
+2025-07-13 15:24:34,910 - ERROR - An error occurred: name 'np' is not defined
+2025-07-13 15:25:34,971 - ERROR - An error occurred: name 'np' is not defined
+2025-07-13 15:26:35,018 - ERROR - An error occurred: name 'np' is not defined
+2025-07-13 15:27:35,079 - ERROR - An error occurred: name 'np' is not defined
+2025-07-13 15:28:35,140 - ERROR - An error occurred: name 'np' is not defined
