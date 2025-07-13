@@ -2,6 +2,7 @@ import time
 import logging
 from threading import Thread
 from kucoin_api.client import KuCoinFuturesClient
+from kucoin_api.test_client import TestKuCoinFuturesClient
 from strategies.scalping_strategy import ScalpingStrategy
 from ai_model.model import TradingAIModel
 from telegram_bot.bot import main as run_telegram_bot
@@ -11,20 +12,18 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 class TradingBot:
     def __init__(self):
-        self.kucoin_client = KuCoinFuturesClient()
+        self.mode = 'test'  # 'test' or 'live'
+        self.kucoin_client = TestKuCoinFuturesClient() if self.mode == 'test' else KuCoinFuturesClient()
         self.strategy = ScalpingStrategy()
         self.ai_model = TradingAIModel()
-        self.mode = 'test'  # 'test' or 'live'
         self.running = False
         self.symbol = 'XBTUSDTM'  # Example symbol
 
     def set_mode(self, mode):
-        self.mode = mode
-
-    def start(self):
-        self.running = True
-        logging.info("Trading bot started.")
-        self.run()
+        if self.mode != mode:
+            self.mode = mode
+            self.kucoin_client = TestKuCoinFuturesClient() if self.mode == 'test' else KuCoinFuturesClient()
+            logging.info(f"Bot mode changed to {mode}.")
 
     def stop(self):
         self.running = False
