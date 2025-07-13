@@ -20,8 +20,6 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     /balance - Show the account balance
     /trades - Show recent trades
     /train - Train the AI model
-    /test_strategy - Test the trading strategy
-    /set_mode <live/test> - Set the bot mode
     """
     await update.message.reply_text(help_text)
 
@@ -51,8 +49,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     bot_instance = context.bot_data.get('bot_instance')
     if bot_instance:
         running = bot_instance.running
-        mode = bot_instance.mode
-        await update.message.reply_text(f'Bot status: {"Running" if running else "Stopped"}\nMode: {mode}')
+        await update.message.reply_text(f'Bot status: {"Running" if running else "Stopped"}')
     else:
         await update.message.reply_text('Bot instance not found.')
 
@@ -71,25 +68,15 @@ async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def trades(update: Update, context: ContextTypes.DEFAULT_TYPE):
     bot_instance = context.bot_data.get('bot_instance')
     if bot_instance:
-        if bot_instance.mode == 'test':
-            trades = bot_instance.kucoin_client.orders
+        try:
+            with open('trades.log', 'r') as f:
+                trades = f.readlines()
             if trades:
-                trades_text = "Recent Trades:\n"
-                for trade_id, trade in trades.items():
-                    trades_text += f"ID: {trade_id}, Symbol: {trade['symbol']}, Side: {trade['side']}, Amount: {trade['amount']}\n"
-                await update.message.reply_text(trades_text)
+                await update.message.reply_text("Recent Trades:\n" + "".join(trades[-10:]))
             else:
                 await update.message.reply_text("No trades found.")
-        else:
-            try:
-                with open('trades.log', 'r') as f:
-                    trades = f.readlines()
-                if trades:
-                    await update.message.reply_text("Recent Trades:\n" + "".join(trades[-10:]))
-                else:
-                    await update.message.reply_text("No trades found.")
-            except FileNotFoundError:
-                await update.message.reply_text("No trades found.")
+        except FileNotFoundError:
+            await update.message.reply_text("No trades found.")
     else:
         await update.message.reply_text('Bot instance not found.')
 
@@ -110,31 +97,6 @@ async def train(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await bot_instance.send_telegram_message(f"🚨 An error occurred during training: {e}")
     else:
         await update.message.reply_text('Bot instance not found.')
-
-async def test_strategy(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    bot_instance = context.bot_data.get('bot_instance')
-    if bot_instance:
-        await update.message.reply_text('Testing strategy...')
-        kline_data = bot_instance.kucoin_client.get_kline_data(bot_instance.symbol, '1m', limit=100)
-        signals_df = bot_instance.strategy.generate_signals(kline_data)
-        await update.message.reply_text("Last 10 signals:\n" + signals_df.tail(10).to_string())
-    else:
-        await update.message.reply_text('Bot instance not found.')
-
-async def set_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if context.args:
-        mode = context.args[0].lower()
-        if mode in ['live', 'test']:
-            bot_instance = context.bot_data.get('bot_instance')
-            if bot_instance:
-                bot_instance.set_mode(mode)
-                await update.message.reply_text(f'Mode set to {mode}.')
-            else:
-                await update.message.reply_text('Bot instance not found.')
-        else:
-            await update.message.reply_text('Invalid mode. Use "live" or "test".')
-    else:
-        await update.message.reply_text('Please specify a mode: /set_mode <live/test>')
 
 async def run_telegram_bot(bot_instance):
     token = os.getenv("TELEGRAM_BOT_TOKEN")
