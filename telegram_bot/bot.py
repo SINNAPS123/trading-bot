@@ -9,15 +9,29 @@ load_dotenv()
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text('Hello! I am your KuCoin Trading Bot. Use /help to see available commands.')
 
-from threading import Thread
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    help_text = """
+    Available commands:
+    /start - Start the bot
+    /help - Show this help message
+    /start_bot - Start the trading bot
+    /stop_bot - Stop the trading bot
+    /status - Show the status of the trading bot
+    /balance - Show the account balance
+    /trades - Show recent trades
+    /train - Train the AI model
+    /test_strategy - Test the trading strategy
+    /set_mode <live/test> - Set the bot mode
+    """
+    await update.message.reply_text(help_text)
+
+import asyncio
 
 async def start_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     bot_instance = context.bot_data.get('bot_instance')
     if bot_instance and not bot_instance.running:
-        bot_instance.running = True
-        thread = Thread(target=bot_instance.run)
-        thread.daemon = True
-        thread.start()
+        loop = asyncio.get_event_loop()
+        loop.create_task(bot_instance.run())
         await update.message.reply_text('Trading bot started.')
     elif bot_instance and bot_instance.running:
         await update.message.reply_text('Trading bot is already running.')
@@ -38,20 +52,63 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f'Bot status: {"Running" if running else "Stopped"}\nMode: {mode}')
 
 async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # This will be integrated with the KuCoin client later
-    await update.message.reply_text('Fetching balance... (to be implemented)')
+    bot_instance = context.bot_data.get('bot_instance')
+    if bot_instance:
+        balance = bot_instance.kucoin_client.get_account_overview()
+        balance_text = "Account Balance:\n"
+        for currency, details in balance.items():
+            if isinstance(details, dict) and 'total' in details:
+                balance_text += f"{currency}: {details['total']}\n"
+        await update.message.reply_text(balance_text)
+    else:
+        await update.message.reply_text('Bot instance not found.')
 
 async def trades(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # This will be integrated with the trading logic later
-    await update.message.reply_text('Fetching recent trades... (to be implemented)')
+    bot_instance = context.bot_data.get('bot_instance')
+    if bot_instance:
+        if bot_instance.mode == 'test':
+            trades = bot_instance.kucoin_client.orders
+            if trades:
+                trades_text = "Recent Trades:\n"
+                for trade_id, trade in trades.items():
+                    trades_text += f"ID: {trade_id}, Symbol: {trade['symbol']}, Side: {trade['side']}, Amount: {trade['amount']}\n"
+                await update.message.reply_text(trades_text)
+            else:
+                await update.message.reply_text("No trades found.")
+        else:
+            try:
+                with open('trades.log', 'r') as f:
+                    trades = f.readlines()
+                if trades:
+                    await update.message.reply_text("Recent Trades:\n" + "".join(trades[-10:]))
+                else:
+                    await update.message.reply_text("No trades found.")
+            except FileNotFoundError:
+                await update.message.reply_text("No trades found.")
+    else:
+        await update.message.reply_text('Bot instance not found.')
 
 async def train(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # This will be integrated with the AI model later
-    await update.message.reply_text('Starting AI model training... (to be implemented)')
+    bot_instance = context.bot_data.get('bot_instance')
+    if bot_instance:
+        await update.message.reply_text('Starting AI model training...')
+        kline_data = bot_instance.kucoin_client.get_kline_data(bot_instance.symbol, '1h', limit=500)
+        X, y = bot_instance.ai_model.prepare_data(kline_data)
+        accuracy = bot_instance.ai_model.train(X, y)
+        bot_instance.ai_model.save_model()
+        await update.message.reply_text(f'AI model training complete. Accuracy: {accuracy}')
+    else:
+        await update.message.reply_text('Bot instance not found.')
 
 async def test_strategy(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # This will be integrated with the backtesting logic later
-    await update.message.reply_text('Testing strategy... (to be implemented)')
+    bot_instance = context.bot_data.get('bot_instance')
+    if bot_instance:
+        await update.message.reply_text('Testing strategy...')
+        kline_data = bot_instance.kucoin_client.get_kline_data(bot_instance.symbol, '1m', limit=100)
+        signals_df = bot_instance.strategy.generate_signals(kline_data)
+        await update.message.reply_text("Last 10 signals:\n" + signals_df.tail(10).to_string())
+    else:
+        await update.message.reply_text('Bot instance not found.')
 
 async def set_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.args:
@@ -80,6 +137,7 @@ async def run_telegram_bot(bot_instance):
     application.bot_data['bot_instance'] = bot_instance
 
     application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("start_bot", start_bot))
     application.add_handler(CommandHandler("stop_bot", stop_bot))
     application.add_handler(CommandHandler("status", status))

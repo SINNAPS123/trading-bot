@@ -6,14 +6,13 @@ class TestTradingBot(unittest.TestCase):
 
     def setUp(self):
         self.bot = TradingBot()
-        self.bot.kucoin_client.exchange = MagicMock()
+        self.bot.kucoin_client = MagicMock()
 
     def test_graceful_stop(self):
         print("Running test_graceful_stop...")
         # Simulate an open position
-        self.bot.kucoin_client.exchange.fetch_positions.return_value = [
+        self.bot.kucoin_client.get_open_positions.return_value = [
             {
-                'info': {'symbol': 'XBTUSDTM'},
                 'symbol': 'XBTUSDTM',
                 'side': 'long',
                 'contracts': 1
@@ -26,7 +25,7 @@ class TestTradingBot(unittest.TestCase):
         print("Called graceful_stop.")
 
         # Verify that the close order was placed
-        self.bot.kucoin_client.exchange.create_market_order.assert_called_once_with('XBTUSDTM', 'sell', 1)
+        self.bot.kucoin_client.place_market_order.assert_called_once_with('XBTUSDTM', 'sell', 1)
         self.assertFalse(self.bot.running)
         print("Assertions passed.")
 
