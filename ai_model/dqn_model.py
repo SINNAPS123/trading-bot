@@ -1,6 +1,8 @@
 import random
 import numpy as np
+import pandas as pd
 from collections import deque
+from sklearn.preprocessing import MinMaxScaler
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense
 from tensorflow.keras.optimizers import Adam
@@ -53,3 +55,17 @@ class DQNModel:
 
     def save(self, name):
         self.model.save_weights(name)
+
+    def prepare_data(self, kline_data):
+        df = pd.DataFrame(kline_data, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+        df['close'] = df['close'].astype(float)
+
+        scaler = MinMaxScaler(feature_range=(0,1))
+        scaled_data = scaler.fit_transform(df['close'].values.reshape(-1,1))
+
+        X, y = [], []
+        for i in range(self.state_size, len(scaled_data)):
+            X.append(scaled_data[i-self.state_size:i, 0])
+            y.append(scaled_data[i, 0])
+
+        return np.array(X), np.array(y)

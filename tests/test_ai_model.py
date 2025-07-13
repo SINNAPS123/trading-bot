@@ -1,10 +1,11 @@
 import unittest
 import numpy as np
-from ai_model.model import TradingAIModel
+import pandas as pd
+from ai_model.dqn_model import DQNModel
 
 class TestAIModel(unittest.TestCase):
     def setUp(self):
-        self.model = TradingAIModel()
+        self.model = DQNModel(5, 3)
         self.kline_data = [
             [1672531200000, 47000, 47100, 46900, 47050, 100],
             [1672531260000, 47050, 47150, 47000, 47100, 120],
@@ -14,15 +15,14 @@ class TestAIModel(unittest.TestCase):
         ] * 20  # Repeat data to have enough for sequence
 
     def test_prepare_data(self):
-        X, y, scaler = self.model.prepare_data(self.kline_data)
-        self.assertEqual(X.shape[1], self.model.sequence_length)
+        X, y = self.model.prepare_data(self.kline_data)
+        self.assertEqual(X.shape[1], self.model.state_size)
         self.assertEqual(X.shape[0], y.shape[0])
 
-    def test_train_and_predict(self):
-        X, y, scaler = self.model.prepare_data(self.kline_data)
-        self.model.train(X, y)
-        prediction = self.model.predict(X)
-        self.assertEqual(prediction.shape[0], y.shape[0])
+    def test_act(self):
+        state = np.reshape(self.kline_data[-1][1:], [1, self.model.state_size])
+        action = self.model.act(state)
+        self.assertIn(action, [0, 1, 2])
 
 if __name__ == '__main__':
     unittest.main()

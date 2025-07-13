@@ -1,5 +1,7 @@
 import unittest
 from unittest.mock import MagicMock
+import numpy as np
+import httpx
 from main import TradingBot
 
 class TestTradingBot(unittest.TestCase):
